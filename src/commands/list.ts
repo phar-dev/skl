@@ -1,6 +1,6 @@
 // skl list - Lista las skills instaladas
 import { SKL_SKILLS_DIR } from '../utils/paths.js';
-import { exists, readdir, getModifiedTime } from '../utils/fs.js';
+import { exists, readdirDirsOnly, getModifiedTime } from '../utils/fs.js';
 import { log, info, warn } from '../utils/logger.js';
 import type { InstalledSkill } from '../types/index.js';
 
@@ -16,7 +16,7 @@ export async function list(_opts?: ListOptions): Promise<void> {
   }
 
   // Leer skills
-  const skillNames = await readdir(SKL_SKILLS_DIR);
+  const skillNames = await readdirDirsOnly(SKL_SKILLS_DIR);
 
   if (skillNames.length === 0) {
     info(`No hay skills instaladas. Ejecuta 'skl init' o 'skl install <repo>' para agregar skills.`);

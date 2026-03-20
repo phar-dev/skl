@@ -47,6 +47,17 @@ export async function mkdirp(dirPath: string): Promise<void> {
 export async function readdir(dirPath: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isDirectory() || e.isSymbolicLink())
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+export async function readdirDirsOnly(dirPath: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
     return entries.filter((e) => e.isDirectory()).map((e) => e.name);
   } catch {
     return [];
