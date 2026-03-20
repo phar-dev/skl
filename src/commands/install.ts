@@ -1,12 +1,24 @@
-// skl install - Instala una skill desde GitHub
+// skl install - Instala skills desde repositorios GitHub
 import path from 'node:path';
 import pc from 'picocolors';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { SKL_SKILLS_DIR } from '../utils/paths.js';
 import { exists, mkdirp, isDirectory } from '../utils/fs.js';
 import { log, success, warn, error, header, item } from '../utils/logger.js';
-import { clone, parseRepo, isGitRepo } from '../utils/git.js';
+import { discoverLocalSkills, filterSkills, installSkill } from '../utils/discover.js';
+import type { DiscoveredSkill } from '../types/index.js';
 
-export async function install(repo: string): Promise<void> {
+const execAsync = promisify(exec);
+
+interface InstallOptions {
+  skill?: string[];
+  all?: boolean;
+  list?: boolean;
+  yes?: boolean;
+}
+
+export async function install(repo: string, options: InstallOptions): Promise<void> {
   header('skl install');
 
   // 1. Parsear el repo
@@ -20,74 +32,185 @@ export async function install(repo: string): Promise<void> {
     return;
   }
 
-  log(`\nInstalando ${pc.bold(parsed.user)}/${pc.bold(parsed.name)}...`);
+  log(`\n${pc.dim('Repo:')} ${pc.bold(parsed.user)}/${pc.bold(parsed.name)}`);
 
   // 2. Asegurar que existe ~/.agents/skills
   if (!(await exists(SKL_SKILLS_DIR))) {
-    log(`Creando directorio de skills...`);
     await mkdirp(SKL_SKILLS_DIR);
   }
 
-  const destPath = path.join(SKL_SKILLS_DIR, parsed.name);
+  // 3. Clonar/fetch el repo en temp
+  const tempDir = await cloneOrPullRepo(parsed.user, parsed.name);
 
-  // 3. Verificar si ya existe
-  if (await exists(destPath)) {
-    if (await isGitRepo(destPath)) {
-      warn(`La skill '${parsed.name}' ya está instalada.`);
-      log('');
-      log(`  Path: ${destPath}`);
-      log(`  Usa 'skl update ${parsed.name}' para actualizarla.`);
-      return;
-    } else {
-      error(`Ya existe un directorio en '${destPath}' pero no es un repo git.`);
-      log('');
-      log('Opciones:');
-      log('  1. Eliminar el directorio manualmente');
-      log(`  2. Usar otro nombre de skill (no soportado aún)`);
-      return;
-    }
+  if (!tempDir) {
+    error('No se pudo obtener el repositorio.');
+    return;
   }
 
-  // 4. Clonar
-  try {
-    await clone(`${parsed.user}/${parsed.name}`, destPath);
-  } catch (err) {
-    error(`Error al clonar el repo.`);
+  // 4. Descubrir skills en el repo
+  const discoveredSkills = await discoverLocalSkills(tempDir);
+
+  if (discoveredSkills.length === 0) {
+    warn('No se encontraron skills en este repositorio.');
     log('');
-    if (err instanceof Error) {
-      if (err.message.includes('Could not resolve host')) {
-        log('Verificá tu conexión a internet.');
-      } else if (err.message.includes('Authentication failed')) {
-        log('El repo no es público o hay un problema de autenticación.');
+    log('Las skills deben tener un archivo SKILL.md con:');
+    log('  - name: nombre-de-la-skill');
+    log('  - description: Descripción de la skill');
+    return;
+  }
+
+  log(`${pc.dim('Skills encontradas:')} ${discoveredSkills.length}`);
+
+  // 5. Modo --list: solo mostrar
+  if (options.list) {
+    await listSkills(discoveredSkills);
+    return;
+  }
+
+  // 6. Filtrar skills si se especificó --skill
+  let skillsToInstall = discoveredSkills;
+
+  if (options.skill && options.skill.length > 0) {
+    skillsToInstall = filterSkills(discoveredSkills, options.skill);
+
+    if (skillsToInstall.length === 0) {
+      error(`No se encontraron skills que coincidan con: ${options.skill.join(', ')}`);
+      log('');
+      log('Skills disponibles:');
+      for (const skill of discoveredSkills) {
+        log(`  - ${skill.name}`);
       }
+      return;
     }
+  } else if (!options.all) {
+    // Interactivo: preguntar cuáles instalar
+    skillsToInstall = await selectSkillsInteractive(discoveredSkills);
+
+    if (skillsToInstall.length === 0) {
+      log('No se seleccionó ninguna skill. Saliendo.');
+      return;
+    }
+  }
+
+  // 7. Instalar las skills seleccionadas
+  log('');
+  for (const skill of skillsToInstall) {
+    await installSingleSkill(skill, tempDir);
+  }
+
+  log('');
+  success(`¡Listo! ${skillsToInstall.length} skill(s) instalada(s).`);
+  log('');
+  log(`Ejecuta ${pc.bold('skl list')} para verlas o ${pc.bold('skl sync')} para sincronizar.`);
+}
+
+/**
+ * Clona o hace pull de un repo
+ */
+async function cloneOrPullRepo(user: string, repo: string): Promise<string | null> {
+  const tempDir = path.join(SKL_SKILLS_DIR, '.tmp', `${user}-${repo}`);
+
+  // Intentar hacer pull si ya existe
+  if (await exists(tempDir)) {
+    try {
+      await execAsync('git pull', { cwd: tempDir });
+      return tempDir;
+    } catch {
+      // Si falla, eliminar y clonar de nuevo
+      await execAsync('rm -rf', { cwd: tempDir });
+    }
+  }
+
+  // Crear temp dir y clonar
+  await mkdirp(path.dirname(tempDir));
+
+  try {
+    const url = `https://github.com/${user}/${repo}`;
+    await execAsync(`git clone --depth 1 ${url} "${tempDir}"`, { cwd: SKL_SKILLS_DIR });
+    return tempDir;
+  } catch (err) {
+    error(`Error al clonar ${user}/${repo}`);
+    if (err instanceof Error) {
+      log(pc.dim(err.message));
+    }
+    return null;
+  }
+}
+
+/**
+ * Lista las skills disponibles
+ */
+async function listSkills(skills: DiscoveredSkill[]): Promise<void> {
+  log('');
+  log(pc.cyan('Skills disponibles:\n'));
+
+  for (const skill of skills) {
+    log(`  ${pc.bold(skill.name)}`);
+    log(`    ${pc.dim(skill.description)}`);
+    if (skill.path) {
+      log(`    ${pc.dim('Path:')} ${skill.path}`);
+    }
+    log('');
+  }
+
+  log(pc.dim('Para instalar: skl install user/repo --skill nombre-de-skill'));
+}
+
+/**
+ * Selección interactiva de skills usando enquirer
+ */
+async function selectSkillsInteractive(skills: DiscoveredSkill[]): Promise<DiscoveredSkill[]> {
+  try {
+    const enquirer = await import('enquirer');
+
+    const answers = await enquirer.prompt([
+      {
+        type: 'multiselect',
+        name: 'skills',
+        message: 'Seleccioná las skills a instalar:',
+        choices: skills.map((s) => ({
+          name: s.name,
+          message: `${s.name} - ${s.description}`,
+          value: s.name,
+        })),
+      },
+    ]);
+
+    const selectedNames = (answers as { skills: string[] }).skills;
+    return skills.filter((s) => selectedNames.includes(s.name));
+  } catch {
+    // Si falla enquirer, instalar todas
+    warn('No se pudo usar modo interactivo. Instalando todas.');
+    return skills;
+  }
+}
+
+/**
+ * Instala una sola skill
+ */
+async function installSingleSkill(skill: DiscoveredSkill, repoPath: string): Promise<void> {
+  const destDir = path.join(SKL_SKILLS_DIR, skill.name);
+
+  // Verificar si ya existe
+  if (await exists(destDir)) {
+    warn(`  ${skill.name} ${pc.dim('(ya instalada, saltando)')}`);
     return;
   }
 
-  // 5. Verificar instalación
-  const installed = await exists(destPath) && await isDirectory(destPath);
-
-  if (!installed) {
-    error('La instalación parece haber fallado.');
-    return;
+  try {
+    await installSkill(skill, repoPath);
+    success(`  ${skill.name}`);
+    log(`    ${pc.dim(skill.description)}`);
+  } catch (err) {
+    error(`  ${skill.name} ${pc.dim('(error)')}`);
   }
+}
 
-  // 6. Verificar que tiene SKILL.md (buena práctica)
-  const hasSkillMd = await exists(path.join(destPath, 'SKILL.md'));
-
-  log('');
-  success(`Skill '${parsed.name}' instalada correctamente!`);
-  log('');
-  item('Path', destPath);
-
-  if (hasSkillMd) {
-    item('SKILL.md', '✓ Encontrado');
-  } else {
-    warn('SKILL.md no encontrado (recomendado)');
-  }
-
-  log('');
-  log(`Próximos pasos:`);
-  log(`  skl list          - Verificar que aparece`);
-  log(`  skl sync          - Sincronizar con agentes`);
+/**
+ * Parse repo string
+ */
+function parseRepo(repo: string): { user: string; name: string } | null {
+  const match = repo.match(/(?:github\.com[/:])?([^/]+)\/([^/]+)/);
+  if (!match) return null;
+  return { user: match[1], name: match[2].replace(/\.git$/, '') };
 }

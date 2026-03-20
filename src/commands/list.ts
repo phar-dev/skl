@@ -2,7 +2,7 @@
 import { SKL_SKILLS_DIR } from '../utils/paths.js';
 import { exists, readdir, getModifiedTime } from '../utils/fs.js';
 import { log, info, warn } from '../utils/logger.js';
-import type { Skill } from '../types/index.js';
+import type { InstalledSkill } from '../types/index.js';
 
 export async function list(): Promise<void> {
   // Verificar que existe el directorio de skills
@@ -20,7 +20,7 @@ export async function list(): Promise<void> {
   }
 
   // Obtener info de cada skill
-  const skills: Skill[] = await Promise.all(
+  const skills: InstalledSkill[] = await Promise.all(
     skillNames.map(async (name) => {
       const skillPath = `${SKL_SKILLS_DIR}/${name}`;
       const lastModified = await getLastModifiedSkill(name);

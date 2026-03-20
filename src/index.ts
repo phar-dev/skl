@@ -21,18 +21,26 @@ program
 
 program
   .command('list')
+  .alias('ls')
   .description('Lista las skills instaladas')
+  .option('-g, --global', 'Listar solo skills globales')
   .action(list);
 
 program
   .command('install <repo>')
-  .description('Instala una skill desde un repo GitHub (user/repo)')
+  .description('Instala una skill desde un repo GitHub')
+  .option('-s, --skill <names...>', 'Skills específicas a instalar')
+  .option('-a, --all', 'Instalar todas las skills del repo')
+  .option('-l, --list', 'Solo listar skills disponibles')
+  .option('-g, --global', 'Instalar en ~/.agents/skills (default)')
+  .option('-y, --yes', 'Saltar confirmaciones')
   .action(install);
 
 program
   .command('sync')
   .description('Sincroniza skills con los agentes seleccionados')
   .option('-a, --agents <agents>', 'Agentes a sincronizar (comma-separated: claude,opencode)')
+  .option('-g, --global', 'Sincronizar skills globales')
   .action(sync);
 
 program
