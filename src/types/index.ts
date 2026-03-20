@@ -8,17 +8,20 @@ export interface AgentConfig {
   skillsPath: string;
 }
 
-export interface Skill {
+// Skill descubierta en un repo
+export interface DiscoveredSkill {
+  name: string;
+  description: string;
+  path: string;           // Path relativo al repo
+  fullPath: string;        // Path absoluto
+  repoPath?: string;      // Path al repo local
+}
+
+// Skill instalada localmente
+export interface InstalledSkill {
   name: string;
   path: string;
   lastModified: Date | null;
-}
-
-export interface SkillConfig {
-  name: string;
-  description?: string;
-  commands?: string[];
-  keywords?: string[];
 }
 
 export interface SklConfig {
@@ -43,4 +46,14 @@ export interface DoctorResult {
   path: string;
   status: 'ok' | 'missing' | 'warning' | 'error';
   message: string;
+}
+
+// Options para install
+export interface InstallOptions {
+  repo?: string;
+  skill?: string[];      // Nombres de skills a instalar
+  list?: boolean;         // Solo listar skills disponibles
+  all?: boolean;          // Instalar todas
+  global?: boolean;       // Instalar globalmente (~/.agents)
+  yes?: boolean;          // Skip confirmaciones
 }
