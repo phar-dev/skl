@@ -1,11 +1,14 @@
 {
   "name": "skl-phar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI para gestionar y sincronizar skills entre agentes de código",
   "type": "module",
-  "bin": "{\"skl\":\"dist/index.js\"}",
+  "bin": {
+    "skl": "./bin/skl"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "scripts": {
     "build": "tsc",
