@@ -1,11 +1,12 @@
 {
-  "name": "skl",
+  "name": "skl-phar",
   "version": "0.1.0",
   "description": "CLI para gestionar y sincronizar skills entre agentes de código",
   "type": "module",
-  "bin": {
-    "skl": "./dist/index.js"
-  },
+  "bin": "{\"skl\":\"dist/index.js\"}",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
@@ -19,9 +20,18 @@
     "skills",
     "agents",
     "claude",
-    "opencode"
+    "opencode",
+    "copilot"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phar-dev/skl"
+  },
+  "homepage": "https://github.com/phar-dev/skl#readme",
+  "bugs": {
+    "url": "https://github.com/phar-dev/skl/issues"
+  },
   "dependencies": {
     "commander": "^12.1.0",
     "enquirer": "^2.4.1",
