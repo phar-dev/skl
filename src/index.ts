@@ -24,30 +24,31 @@ program
   .alias('ls')
   .description('Lista las skills instaladas')
   .option('-g, --global', 'Listar solo skills globales')
-  .action(list);
+  .action((opts) => list(opts));
 
-program
+const installCmd = program
   .command('install <repo>')
   .description('Instala una skill desde un repo GitHub')
   .option('-s, --skill <names...>', 'Skills específicas a instalar')
   .option('-a, --all', 'Instalar todas las skills del repo')
   .option('-l, --list', 'Solo listar skills disponibles')
   .option('-g, --global', 'Instalar en ~/.agents/skills (default)')
-  .option('-y, --yes', 'Saltar confirmaciones')
-  .action(install);
+  .option('-y, --yes', 'Saltar confirmaciones');
+
+installCmd.action((repo, opts) => install(repo, opts));
 
 program
   .command('sync')
   .description('Sincroniza skills con los agentes seleccionados')
   .option('-a, --agents <agents>', 'Agentes a sincronizar (comma-separated: claude,opencode)')
   .option('-g, --global', 'Sincronizar skills globales')
-  .action(sync);
+  .action((opts) => sync(opts));
 
 program
   .command('update')
   .description('Actualiza las skills instaladas (git pull)')
   .option('-s, --skill <name>', 'Skill específica a actualizar')
-  .action(update);
+  .action((opts) => update(opts));
 
 program
   .command('doctor')

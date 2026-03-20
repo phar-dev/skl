@@ -4,7 +4,11 @@ import { exists, readdir, getModifiedTime } from '../utils/fs.js';
 import { log, info, warn } from '../utils/logger.js';
 import type { InstalledSkill } from '../types/index.js';
 
-export async function list(): Promise<void> {
+interface ListOptions {
+  global?: boolean;
+}
+
+export async function list(_opts?: ListOptions): Promise<void> {
   // Verificar que existe el directorio de skills
   if (!(await exists(SKL_SKILLS_DIR))) {
     info(`No hay skills instaladas. Ejecuta 'skl init' para comenzar.`);

@@ -1,5 +1,6 @@
 // skl install - Instala skills desde repositorios GitHub
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import pc from 'picocolors';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -61,9 +62,10 @@ export async function install(repo: string, options: InstallOptions): Promise<vo
 
   log(`${pc.dim('Skills encontradas:')} ${discoveredSkills.length}`);
 
-  // 5. Modo --list: solo mostrar
+  // 5. Modo --list: solo mostrar y limpiar temp
   if (options.list) {
     await listSkills(discoveredSkills);
+    await cleanupTemp(tempDir);
     return;
   }
 
@@ -97,6 +99,9 @@ export async function install(repo: string, options: InstallOptions): Promise<vo
   for (const skill of skillsToInstall) {
     await installSingleSkill(skill, tempDir);
   }
+
+  // 8. Limpiar temp
+  await cleanupTemp(tempDir);
 
   log('');
   success(`¡Listo! ${skillsToInstall.length} skill(s) instalada(s).`);
@@ -213,4 +218,23 @@ function parseRepo(repo: string): { user: string; name: string } | null {
   const match = repo.match(/(?:github\.com[/:])?([^/]+)\/([^/]+)/);
   if (!match) return null;
   return { user: match[1], name: match[2].replace(/\.git$/, '') };
+}
+
+/**
+ * Limpia el directorio temporal
+ */
+async function cleanupTemp(tempDir: string): Promise<void> {
+  try {
+    // Borrar el dir del repo específico
+    await execAsync(`rm -rf "${tempDir}"`);
+    
+    // Borrar el .tmp si está vacío
+    const tmpDir = path.dirname(tempDir);
+    const entries = await fs.readdir(tmpDir);
+    if (entries.length === 0) {
+      await fs.rmdir(tmpDir);
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
 }
