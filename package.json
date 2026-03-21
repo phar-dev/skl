@@ -1,6 +1,6 @@
 {
   "name": "@phardev/skl",
-  "version": "0.1.2",
+  "version": "0.1.9",
   "description": "CLI para gestionar y sincronizar skills entre agentes de código",
   "type": "module",
   "files": [
@@ -36,7 +36,8 @@
     "commander": "^12.1.0",
     "enquirer": "^2.4.1",
     "gray-matter": "^4.0.3",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "prompts": "^2.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -50,6 +51,6 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "skl": "bin/skl"
+    "skl": "bin/skl.cjs"
   }
 }

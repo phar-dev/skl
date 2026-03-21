@@ -1,46 +1,52 @@
 // Descubrimiento de skills en repositorios
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import matter from 'gray-matter';
-import { SKL_SKILLS_DIR } from './paths.js';
-import { exists, mkdirp, readdirRecursive } from './fs.js';
-import type { DiscoveredSkill } from '../types/index.js';
+import fs from "node:fs/promises";
+import path from "node:path";
+import matter from "gray-matter";
+import { SKL_SKILLS_DIR } from "./paths.js";
+import { exists, mkdirp, readdirRecursive } from "./fs.js";
+import type { DiscoveredSkill } from "../types/index.js";
 
 // Paths donde buscar SKILL.md en un repo (orden de prioridad)
 const SKILL_SEARCH_PATHS = [
-  '',  // Root (si tiene SKILL.md directo)
-  'skills',
-  'skills/.curated',
-  'skills/.experimental',
-  'skills/.system',
+  "", // Root (si tiene SKILL.md directo)
+  "skills",
+  "skills/.curated",
+  "skills/.experimental",
+  "skills/.system",
+  ".claude/skills",
+  ".opencode/skills",
+  ".codex/skills",
+  ".copilot/skills",
 ];
 
 // Directorios a excluir en búsqueda
 const EXCLUDE_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  '__pycache__',
-  '.next',
-  '.nuxt',
-  'coverage',
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "__pycache__",
+  ".next",
+  ".nuxt",
+  "coverage",
 ]);
 
 /**
  * Descubre todas las skills en un directorio local
  */
-export async function discoverLocalSkills(dirPath: string): Promise<DiscoveredSkill[]> {
+export async function discoverLocalSkills(
+  dirPath: string,
+): Promise<DiscoveredSkill[]> {
   const skills: DiscoveredSkill[] = [];
 
   // Primero buscar en paths prioritarios
   for (const searchPath of SKILL_SEARCH_PATHS) {
     const skillPath = searchPath ? path.join(dirPath, searchPath) : dirPath;
-    
+
     if (!(await exists(skillPath))) continue;
-    
-    const skillMdPath = path.join(skillPath, 'SKILL.md');
-    
+
+    const skillMdPath = path.join(skillPath, "SKILL.md");
+
     // Si hay SKILL.md directo en el path prioritario
     if (await exists(skillMdPath)) {
       const skill = await parseSkillMd(skillMdPath, searchPath);
@@ -61,7 +67,10 @@ export async function discoverLocalSkills(dirPath: string): Promise<DiscoveredSk
 /**
  * Descubre skills en un subdirectorio
  */
-async function discoverInDirectory(dirPath: string, basePath: string): Promise<DiscoveredSkill[]> {
+async function discoverInDirectory(
+  dirPath: string,
+  basePath: string,
+): Promise<DiscoveredSkill[]> {
   const skills: DiscoveredSkill[] = [];
 
   try {
@@ -72,7 +81,7 @@ async function discoverInDirectory(dirPath: string, basePath: string): Promise<D
       if (EXCLUDE_DIRS.has(entry.name)) continue;
 
       const skillPath = path.join(dirPath, entry.name);
-      const skillMdPath = path.join(skillPath, 'SKILL.md');
+      const skillMdPath = path.join(skillPath, "SKILL.md");
 
       if (await exists(skillMdPath)) {
         const relPath = basePath ? `${basePath}/${entry.name}` : entry.name;
@@ -94,27 +103,27 @@ async function discoverInDirectory(dirPath: string, basePath: string): Promise<D
  */
 export async function parseSkillMd(
   skillMdPath: string,
-  repoPath: string = '',
+  repoPath: string = "",
 ): Promise<DiscoveredSkill | null> {
   try {
-    const content = await fs.readFile(skillMdPath, 'utf-8');
+    const content = await fs.readFile(skillMdPath, "utf-8");
     const { data, content: _ } = matter(content);
 
     // Validar campos requeridos
     const name = data.name;
     const description = data.description;
 
-    if (typeof name !== 'string' || !name) {
+    if (typeof name !== "string" || !name) {
       return null;
     }
 
-    if (typeof description !== 'string') {
+    if (typeof description !== "string") {
       // Description es opcional pero recomendado
       return null;
     }
 
     return {
-      name: name.toLowerCase().replace(/\s+/g, '-'),
+      name: name.toLowerCase().replace(/\s+/g, "-"),
       description,
       path: repoPath,
       fullPath: skillMdPath,
@@ -142,27 +151,33 @@ function deduplicateSkills(skills: DiscoveredSkill[]): DiscoveredSkill[] {
 /**
  * Filtra skills por nombre
  */
-export function filterSkills(skills: DiscoveredSkill[], names: string[]): DiscoveredSkill[] {
+export function filterSkills(
+  skills: DiscoveredSkill[],
+  names: string[],
+): DiscoveredSkill[] {
   if (names.length === 0) return skills;
 
   const normalizedNames = names.map((n) => n.toLowerCase());
 
   return skills.filter((skill) => {
     const skillName = skill.name.toLowerCase();
-    return normalizedNames.some((n) => skillName.includes(n) || n.includes(skillName));
+    return normalizedNames.some(
+      (n) => skillName.includes(n) || n.includes(skillName),
+    );
   });
 }
 
 /**
- * Copia una skill a ~/.agents/skills/
+ * Copia una skill al directorio de destino
  */
 export async function installSkill(
   skill: DiscoveredSkill,
   repoPath: string,
+  destDir: string,
 ): Promise<string> {
-  const destDir = path.join(SKL_SKILLS_DIR, skill.name);
-  
-  await mkdirp(SKL_SKILLS_DIR);
+  const skillDestDir = path.join(destDir, skill.name);
+
+  await mkdirp(destDir);
 
   // Determinar path absoluto de la skill source
   let sourceDir: string;
@@ -173,9 +188,9 @@ export async function installSkill(
   }
 
   // Copiar directorio de la skill
-  await copyDirectory(sourceDir, destDir);
+  await copyDirectory(sourceDir, skillDestDir);
 
-  return destDir;
+  return skillDestDir;
 }
 
 /**
@@ -191,8 +206,8 @@ async function copyDirectory(src: string, dest: string): Promise<void> {
     const destPath = path.join(dest, entry.name);
 
     // Excluir archivos ocultos y .git
-    if (entry.name.startsWith('.') && entry.name !== '.') continue;
-    if (entry.name === '.git') continue;
+    if (entry.name.startsWith(".") && entry.name !== ".") continue;
+    if (entry.name === ".git") continue;
     if (EXCLUDE_DIRS.has(entry.name)) continue;
 
     if (entry.isDirectory()) {
@@ -207,9 +222,11 @@ async function copyDirectory(src: string, dest: string): Promise<void> {
  * Sanitiza el nombre de una skill para uso en filesystem
  */
 export function sanitizeSkillName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 100) || 'unnamed-skill';
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .substring(0, 100) || "unnamed-skill"
+  );
 }

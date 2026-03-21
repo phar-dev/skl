@@ -1,50 +1,101 @@
 // skl install - Instala skills desde repositorios GitHub
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import pc from 'picocolors';
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-import { SKL_SKILLS_DIR } from '../utils/paths.js';
-import { exists, mkdirp, isDirectory } from '../utils/fs.js';
-import { log, success, warn, error, header, item } from '../utils/logger.js';
-import { discoverLocalSkills, filterSkills, installSkill } from '../utils/discover.js';
-import type { DiscoveredSkill } from '../types/index.js';
+import path from "node:path";
+import fs from "node:fs/promises";
+import pc from "picocolors";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+import { SKL_SKILLS_DIR } from "../utils/paths.js";
+import { exists, mkdirp } from "../utils/fs.js";
+import { log, success, warn, error, header } from "../utils/logger.js";
+import {
+  discoverLocalSkills,
+  filterSkills,
+  installSkill,
+} from "../utils/discover.js";
+import type { DiscoveredSkill } from "../types/index.js";
+// @ts-ignore - prompts no tiene tipos oficiales completos
+import prompts from "prompts";
 
 const execAsync = promisify(exec);
+
+type ScopeType = "global" | "project";
 
 interface InstallOptions {
   skill?: string[];
   all?: boolean;
   list?: boolean;
   yes?: boolean;
+  global?: boolean;
+  project?: boolean;
 }
 
-export async function install(repo: string, options: InstallOptions): Promise<void> {
-  header('skl install');
+export async function install(
+  repo: string,
+  options: InstallOptions,
+): Promise<void> {
+  header("skl install");
 
   // 1. Parsear el repo
   const parsed = parseRepo(repo);
 
   if (!parsed) {
     error(`Repo inválido: '${repo}'`);
-    log('');
-    log('Formato esperado: user/repo (ej: myuser/my-skill)');
-    log('O URL completa: https://github.com/user/repo');
+    log("");
+    log("Formato esperado: user/repo (ej: myuser/my-skill)");
+    log("O URL completa: https://github.com/user/repo");
     return;
   }
 
-  log(`\n${pc.dim('Repo:')} ${pc.bold(parsed.user)}/${pc.bold(parsed.name)}`);
+  log(`\n${pc.dim("Repo:")} ${pc.bold(parsed.user)}/${pc.bold(parsed.name)}`);
 
-  // 2. Asegurar que existe ~/.agents/skills
-  if (!(await exists(SKL_SKILLS_DIR))) {
-    await mkdirp(SKL_SKILLS_DIR);
+  // 2. Determinar el scope (global vs proyecto)
+  let scope: ScopeType;
+  let skillsDestDir: string;
+
+  if (options.project) {
+    // --project flag
+    scope = "project";
+    skillsDestDir = path.join(process.cwd(), ".agents", "skills");
+  } else if (options.global !== undefined) {
+    // --global or --global=false
+    scope = options.global ? "global" : "project";
+    skillsDestDir =
+      scope === "global"
+        ? SKL_SKILLS_DIR
+        : path.join(process.cwd(), ".agents", "skills");
+  } else {
+    // Interactivo
+    const selectedScope = await selectScopeInteractive();
+    if (!selectedScope) {
+      log("No se seleccionó scope. Saliendo.");
+      return;
+    }
+    scope = selectedScope;
+    skillsDestDir =
+      scope === "global"
+        ? SKL_SKILLS_DIR
+        : path.join(process.cwd(), ".agents", "skills");
+  }
+
+  log(
+    `${pc.dim("Instalar en:")} ${scope === "global" ? "Global" : "Proyecto"}`,
+  );
+  log(`${pc.dim("Destino:")} ${skillsDestDir}`);
+
+  // 3. Asegurar que existe el directorio de destino
+  if (!(await exists(skillsDestDir))) {
+    await mkdirp(skillsDestDir);
   }
 
   // 3. Clonar/fetch el repo en temp
-  const tempDir = await cloneOrPullRepo(parsed.user, parsed.name);
+  const tempDir = await cloneOrPullRepo(
+    parsed.user,
+    parsed.name,
+    skillsDestDir,
+  );
 
   if (!tempDir) {
-    error('No se pudo obtener el repositorio.');
+    error("No se pudo obtener el repositorio.");
     return;
   }
 
@@ -52,15 +103,15 @@ export async function install(repo: string, options: InstallOptions): Promise<vo
   const discoveredSkills = await discoverLocalSkills(tempDir);
 
   if (discoveredSkills.length === 0) {
-    warn('No se encontraron skills en este repositorio.');
-    log('');
-    log('Las skills deben tener un archivo SKILL.md con:');
-    log('  - name: nombre-de-la-skill');
-    log('  - description: Descripción de la skill');
+    warn("No se encontraron skills en este repositorio.");
+    log("");
+    log("Las skills deben tener un archivo SKILL.md con:");
+    log("  - name: nombre-de-la-skill");
+    log("  - description: Descripción de la skill");
     return;
   }
 
-  log(`${pc.dim('Skills encontradas:')} ${discoveredSkills.length}`);
+  log(`${pc.dim("Skills encontradas:")} ${discoveredSkills.length}`);
 
   // 5. Modo --list: solo mostrar y limpiar temp
   if (options.list) {
@@ -76,9 +127,11 @@ export async function install(repo: string, options: InstallOptions): Promise<vo
     skillsToInstall = filterSkills(discoveredSkills, options.skill);
 
     if (skillsToInstall.length === 0) {
-      error(`No se encontraron skills que coincidan con: ${options.skill.join(', ')}`);
-      log('');
-      log('Skills disponibles:');
+      error(
+        `No se encontraron skills que coincidan con: ${options.skill.join(", ")}`,
+      );
+      log("");
+      log("Skills disponibles:");
       for (const skill of discoveredSkills) {
         log(`  - ${skill.name}`);
       }
@@ -89,40 +142,77 @@ export async function install(repo: string, options: InstallOptions): Promise<vo
     skillsToInstall = await selectSkillsInteractive(discoveredSkills);
 
     if (skillsToInstall.length === 0) {
-      log('No se seleccionó ninguna skill. Saliendo.');
+      log("No se seleccionó ninguna skill. Saliendo.");
       return;
     }
   }
 
   // 7. Instalar las skills seleccionadas
-  log('');
+  log("");
   for (const skill of skillsToInstall) {
-    await installSingleSkill(skill, tempDir);
+    await installSingleSkill(skill, tempDir, skillsDestDir);
   }
 
   // 8. Limpiar temp
   await cleanupTemp(tempDir);
 
-  log('');
+  log("");
   success(`¡Listo! ${skillsToInstall.length} skill(s) instalada(s).`);
-  log('');
-  log(`Ejecuta ${pc.bold('skl list')} para verlas o ${pc.bold('skl sync')} para sincronizar.`);
+  log("");
+  log(
+    `Ejecuta ${pc.bold("skl list")} para verlas o ${pc.bold("skl sync")} para sincronizar.`,
+  );
+}
+
+/**
+ * Selección interactiva de scope (global vs proyecto)
+ */
+async function selectScopeInteractive(): Promise<ScopeType | null> {
+  try {
+    const response = await prompts({
+      type: "select",
+      name: "scope",
+      message: "Dónde querés instalar las skills?",
+      hint: "(Seleccioná con las flechas)",
+      choices: [
+        {
+          title: "Global",
+          description: "~/.agents/skills (disponible para todos los proyectos)",
+          value: "global",
+        },
+        {
+          title: "Proyecto",
+          description: "./.agents/skills (solo para este proyecto)",
+          value: "project",
+        },
+      ],
+    });
+
+    return response.scope || null;
+  } catch {
+    warn("No se pudo usar selección interactiva. Usando global.");
+    return "global";
+  }
 }
 
 /**
  * Clona o hace pull de un repo
  */
-async function cloneOrPullRepo(user: string, repo: string): Promise<string | null> {
-  const tempDir = path.join(SKL_SKILLS_DIR, '.tmp', `${user}-${repo}`);
+async function cloneOrPullRepo(
+  user: string,
+  repo: string,
+  destDir: string,
+): Promise<string | null> {
+  const tempDir = path.join(destDir, ".tmp", `${user}-${repo}`);
 
   // Intentar hacer pull si ya existe
   if (await exists(tempDir)) {
     try {
-      await execAsync('git pull', { cwd: tempDir });
+      await execAsync("git pull", { cwd: tempDir });
       return tempDir;
     } catch {
       // Si falla, eliminar y clonar de nuevo
-      await execAsync('rm -rf', { cwd: tempDir });
+      await execAsync("rm -rf", { cwd: tempDir });
     }
   }
 
@@ -131,7 +221,9 @@ async function cloneOrPullRepo(user: string, repo: string): Promise<string | nul
 
   try {
     const url = `https://github.com/${user}/${repo}`;
-    await execAsync(`git clone --depth 1 ${url} "${tempDir}"`, { cwd: SKL_SKILLS_DIR });
+    await execAsync(`git clone --depth 1 ${url} "${tempDir}"`, {
+      cwd: destDir,
+    });
     return tempDir;
   } catch (err) {
     error(`Error al clonar ${user}/${repo}`);
@@ -146,46 +238,52 @@ async function cloneOrPullRepo(user: string, repo: string): Promise<string | nul
  * Lista las skills disponibles
  */
 async function listSkills(skills: DiscoveredSkill[]): Promise<void> {
-  log('');
-  log(pc.cyan('Skills disponibles:\n'));
+  log("");
+  log(pc.cyan("Skills disponibles:\n"));
 
   for (const skill of skills) {
     log(`  ${pc.bold(skill.name)}`);
     log(`    ${pc.dim(skill.description)}`);
     if (skill.path) {
-      log(`    ${pc.dim('Path:')} ${skill.path}`);
+      log(`    ${pc.dim("Path:")} ${skill.path}`);
     }
-    log('');
+    log("");
   }
 
-  log(pc.dim('Para instalar: skl install user/repo --skill nombre-de-skill'));
+  log(pc.dim("Para instalar: skl install user/repo --skill nombre-de-skill"));
 }
 
 /**
- * Selección interactiva de skills usando enquirer
+ * Selección interactiva de skills usando prompts
  */
-async function selectSkillsInteractive(skills: DiscoveredSkill[]): Promise<DiscoveredSkill[]> {
+async function selectSkillsInteractive(
+  skills: DiscoveredSkill[],
+): Promise<DiscoveredSkill[]> {
   try {
-    const enquirer = await import('enquirer');
+    const response = await prompts({
+      type: "multiselect",
+      name: "skills",
+      message: "Seleccioná las skills a instalar:",
+      hint: "(Espacio para seleccionar, Enter para confirmar)",
+      instructions: false,
+      choices: skills.map((s) => ({
+        title: s.name,
+        description: s.description,
+        value: s.name,
+      })),
+      min: 1,
+    });
 
-    const answers = await enquirer.prompt([
-      {
-        type: 'multiselect',
-        name: 'skills',
-        message: 'Seleccioná las skills a instalar:',
-        choices: skills.map((s) => ({
-          name: s.name,
-          message: `${s.name} - ${s.description}`,
-          value: s.name,
-        })),
-      },
-    ]);
+    if (!response.skills || response.skills.length === 0) {
+      warn("No se seleccionó ninguna skill. Instalando todas.");
+      return skills;
+    }
 
-    const selectedNames = (answers as { skills: string[] }).skills;
+    const selectedNames = response.skills as string[];
     return skills.filter((s) => selectedNames.includes(s.name));
   } catch {
-    // Si falla enquirer, instalar todas
-    warn('No se pudo usar modo interactivo. Instalando todas.');
+    // Si falla prompts, instalar todas
+    warn("No se pudo usar modo interactivo. Instalando todas.");
     return skills;
   }
 }
@@ -193,21 +291,25 @@ async function selectSkillsInteractive(skills: DiscoveredSkill[]): Promise<Disco
 /**
  * Instala una sola skill
  */
-async function installSingleSkill(skill: DiscoveredSkill, repoPath: string): Promise<void> {
-  const destDir = path.join(SKL_SKILLS_DIR, skill.name);
+async function installSingleSkill(
+  skill: DiscoveredSkill,
+  repoPath: string,
+  destDir: string,
+): Promise<void> {
+  const finalDestDir = path.join(destDir, skill.name);
 
   // Verificar si ya existe
-  if (await exists(destDir)) {
-    warn(`  ${skill.name} ${pc.dim('(ya instalada, saltando)')}`);
+  if (await exists(finalDestDir)) {
+    warn(`  ${skill.name} ${pc.dim("(ya instalada, saltando)")}`);
     return;
   }
 
   try {
-    await installSkill(skill, repoPath);
+    await installSkill(skill, repoPath, destDir);
     success(`  ${skill.name}`);
     log(`    ${pc.dim(skill.description)}`);
   } catch (err) {
-    error(`  ${skill.name} ${pc.dim('(error)')}`);
+    error(`  ${skill.name} ${pc.dim("(error)")}`);
   }
 }
 
@@ -217,7 +319,7 @@ async function installSingleSkill(skill: DiscoveredSkill, repoPath: string): Pro
 function parseRepo(repo: string): { user: string; name: string } | null {
   const match = repo.match(/(?:github\.com[/:])?([^/]+)\/([^/]+)/);
   if (!match) return null;
-  return { user: match[1], name: match[2].replace(/\.git$/, '') };
+  return { user: match[1], name: match[2].replace(/\.git$/, "") };
 }
 
 /**
@@ -227,7 +329,7 @@ async function cleanupTemp(tempDir: string): Promise<void> {
   try {
     // Borrar el dir del repo específico
     await execAsync(`rm -rf "${tempDir}"`);
-    
+
     // Borrar el .tmp si está vacío
     const tmpDir = path.dirname(tempDir);
     const entries = await fs.readdir(tmpDir);
