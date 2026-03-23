@@ -1,56 +1,61 @@
-// skl init - Inicializa el entorno local
-import path from 'node:path';
-import { SKL_DIR, SKL_SKILLS_DIR } from '../utils/paths.js';
-import { exists, mkdirp, isDirectory, isEmptyDir } from '../utils/fs.js';
-import { log, success, info, warn, header } from '../utils/logger.js';
+// skl init - Inicializa el entorno local del proyecto
+import path from "node:path";
+import { exists, mkdirp, isEmptyDir } from "../utils/fs.js";
+import { log, success, info, header } from "../utils/logger.js";
 
-const EXAMPLE_SKILL_NAME = 'example-skill';
+const EXAMPLE_SKILL_NAME = "example-skill";
 
 export async function init(): Promise<void> {
-  header('skl init');
+  header("skl init");
 
-  // 1. Crear ~/.agents si no existe
-  if (!(await exists(SKL_DIR))) {
-    log(`Creando ${SKL_DIR}...`);
-    await mkdirp(SKL_DIR);
-    success(`Directorio ${SKL_DIR} creado`);
+  // Usar directorio del proyecto actual
+  const projectDir = process.cwd();
+  const projectAgentsDir = path.join(projectDir, ".agents");
+  const projectSkillsDir = path.join(projectAgentsDir, "skills");
+
+  // 1. Crear .agents si no existe
+  if (!(await exists(projectAgentsDir))) {
+    log(`Creando ${projectAgentsDir}/...`);
+    await mkdirp(projectAgentsDir);
+    success(`Directorio .agents creado`);
   } else {
-    info(`Directorio ${SKL_DIR} ya existe`);
+    info(`Directorio .agents ya existe`);
   }
 
-  // 2. Crear ~/.agents/skills si no existe
-  if (!(await exists(SKL_SKILLS_DIR))) {
-    log(`Creando ${SKL_SKILLS_DIR}...`);
-    await mkdirp(SKL_SKILLS_DIR);
+  // 2. Crear .agents/skills si no existe
+  if (!(await exists(projectSkillsDir))) {
+    log(`Creando ${projectSkillsDir}/...`);
+    await mkdirp(projectSkillsDir);
     success(`Directorio skills creado`);
   } else {
     info(`Directorio skills ya existe`);
   }
 
   // 3. Verificar si ya hay skills instaladas
-  const skillsExist = await exists(SKL_SKILLS_DIR) && !(await isEmptyDir(SKL_SKILLS_DIR));
+  const skillsExist =
+    (await exists(projectSkillsDir)) && !(await isEmptyDir(projectSkillsDir));
 
   if (skillsExist) {
     info(`Ya hay skills instaladas. Saltando creación de ejemplo.`);
-    log('');
+    log("");
     log(`Ejecuta 'skl list' para ver las skills instaladas.`);
     return;
   }
 
   // 4. Crear skill de ejemplo
-  await createExampleSkill();
+  await createExampleSkill(projectSkillsDir);
 
-  log('');
+  log("");
   success(`Entorno inicializado correctamente!`);
-  log('');
+  log("");
   log(`Próximos pasos:`);
   log(`  1. skl list          - Ver las skills instaladas`);
   log(`  2. skl install       - Instalar una skill desde GitHub`);
   log(`  3. skl sync          - Sincronizar con agentes`);
 }
 
-async function createExampleSkill(): Promise<void> {
-  const skillPath = path.join(SKL_SKILLS_DIR, EXAMPLE_SKILL_NAME);
+async function createExampleSkill(skillsDir: string): Promise<void> {
+  const skillPath = path.join(skillsDir, EXAMPLE_SKILL_NAME);
 
   log(`\nCreando skill de ejemplo...`);
 
@@ -87,7 +92,7 @@ distribuir la skill a tus agentes.
 `;
 
   // references/README.md
-  const refsDir = path.join(skillPath, 'references');
+  const refsDir = path.join(skillPath, "references");
   await mkdirp(refsDir);
   const refsMd = `# Referencias
 
@@ -95,7 +100,7 @@ Agrega aquí documentación, cheatsheets, y ejemplos relevantes para esta skill.
 `;
 
   // templates/README.md
-  const templatesDir = path.join(skillPath, 'templates');
+  const templatesDir = path.join(skillPath, "templates");
   await mkdirp(templatesDir);
   const templatesMd = `# Templates
 
@@ -103,11 +108,11 @@ Agrega aquí templates reutilizables (código, configs, etc).
 `;
 
   // Escribir archivos
-  const { writeFile } = await import('node:fs/promises');
+  const { writeFile } = await import("node:fs/promises");
 
-  await writeFile(path.join(skillPath, 'SKILL.md'), skillMd, 'utf-8');
-  await writeFile(path.join(refsDir, 'README.md'), refsMd, 'utf-8');
-  await writeFile(path.join(templatesDir, 'README.md'), templatesMd, 'utf-8');
+  await writeFile(path.join(skillPath, "SKILL.md"), skillMd, "utf-8");
+  await writeFile(path.join(refsDir, "README.md"), refsMd, "utf-8");
+  await writeFile(path.join(templatesDir, "README.md"), templatesMd, "utf-8");
 
   success(`Skill '${EXAMPLE_SKILL_NAME}' creada`);
 }
