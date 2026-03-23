@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { readFileSync } from "node:fs";
 import { init } from "./commands/init.js";
 import { list } from "./commands/list.js";
 import { install } from "./commands/install.js";
@@ -7,16 +8,19 @@ import { sync } from "./commands/sync.js";
 import { update } from "./commands/update.js";
 import { doctor } from "./commands/doctor.js";
 
+// Leer versión del package.json
+const packageJson = JSON.parse(readFileSync("./package.json", "utf-8"));
+
 const program = new Command();
 
 program
   .name("skl")
   .description("Gestor de skills para agentes de código")
-  .version("0.1.0");
+  .version(packageJson.version);
 
 program
   .command("init")
-  .description("Inicializa el entorno local (~/.agents/skills)")
+  .description("Inicializa el entorno local del proyecto")
   .action(init);
 
 program
