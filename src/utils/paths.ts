@@ -56,3 +56,28 @@ export function getAgentSkillsPathRelative(
   const agentDir = path.basename(path.dirname(agent.skillsPath));
   return path.join(baseDir, agentDir, "skills");
 }
+
+// ============================================
+// Paths del proyecto actual (process.cwd())
+// ============================================
+
+/**
+ * Directorio .agents del proyecto actual
+ */
+export function getProjectSKLDir(): string {
+  return path.join(process.cwd(), ".agents");
+}
+
+/**
+ * Directorio de skills del proyecto actual (.agents/skills)
+ */
+export function getProjectSKLSkillsDir(): string {
+  return path.join(getProjectSKLDir(), "skills");
+}
+
+/**
+ * Obtiene el path de skills de un agente en el proyecto actual
+ */
+export function getProjectAgentSkillsPath(agentId: AgentType): string {
+  return getAgentSkillsPathRelative(agentId, getProjectSKLDir());
+}
