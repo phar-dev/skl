@@ -255,7 +255,6 @@ skl doctor
 ## Repos de Skills Recomendados
 
 - [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) - Skills oficiales de Vercel
-- [your-org/your-skills](https://github.com/) - Crea tu propio repo de skills
 
 ### Crear tu propia Skill
 
