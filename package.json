@@ -1,6 +1,6 @@
 {
   "name": "@phardev/skl",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "CLI para gestionar y sincronizar skills entre agentes de código",
   "type": "module",
   "files": [
