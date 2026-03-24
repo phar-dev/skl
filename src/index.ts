@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { init } from "./commands/init.js";
 import { list } from "./commands/list.js";
 import { install } from "./commands/install.js";
@@ -8,8 +10,13 @@ import { sync } from "./commands/sync.js";
 import { update } from "./commands/update.js";
 import { doctor } from "./commands/doctor.js";
 
-// Leer versión del package.json
-const packageJson = JSON.parse(readFileSync("./package.json", "utf-8"));
+// Obtener la ruta del directorio donde está instalado el paquete
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Leer versión del package.json desde la ubicación del paquete
+const packageJson = JSON.parse(
+  readFileSync(path.join(__dirname, "../package.json"), "utf-8"),
+);
 
 const program = new Command();
 
